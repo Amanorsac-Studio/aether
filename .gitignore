@@ -1,0 +1,10 @@
+build/
+build-win/
+JUCE/
+dist/
+*.user
+.vs/
+.DS_Store
+installer/native/payload.zip
+installer/native/*.o
+installer/native/*.exe

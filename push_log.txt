@@ -1,0 +1,14 @@
+AETHER -> GitHub
+folder: /c/Users/amano/Documents/Amanorsac Studio/APPS/AETHER
+git:    git version 2.55.0.windows.3
+
+Removed superseded installer/Bootstrapper
+Removed superseded installer/uninstall.ps1
+$ git remote set-url origin https://github.com/Amanorsac-Studio/aether.git
+$ git config user.email amanorsac@gmail.com
+Set repo-local user.email (no global identity was configured)
+$ git config user.name Nene (Amanorsac Studio)
+Set repo-local user.name
+identity: Nene (Amanorsac Studio) <amanorsac@gmail.com>
+
+$ git add -A
