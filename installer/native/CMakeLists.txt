@@ -41,7 +41,11 @@ target_link_libraries(AETHER_Setup PRIVATE shlwapi ole32 uuid comctl32 gdi32 use
 
 if(MSVC)
     target_compile_options(AETHER_Setup PRIVATE /O2 /W3 /utf-8)
-    target_link_options(AETHER_Setup PRIVATE /ENTRY:wWinMainCRTStartup)
+    # setup.rc already embeds setup.manifest as RT_MANIFEST id 1. Left to itself the
+    # MSVC linker embeds a second, generated one, and CVTRES then stops with
+    # "CVT1100: duplicate resource. type:MANIFEST" followed by LNK1123. MinGW's
+    # linker generates nothing, which is why the cross-build never hit this.
+    target_link_options(AETHER_Setup PRIVATE /ENTRY:wWinMainCRTStartup /MANIFEST:NO)
     # Static CRT so the installer runs on a machine with no Visual C++ redistributable.
     set_property(TARGET AETHER_Setup PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
 else()
