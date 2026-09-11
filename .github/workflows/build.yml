@@ -33,8 +33,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No -G: the hosted image's Visual Studio version changes over time (pinning
+      # "Visual Studio 17 2022" broke run #1 once the runner moved to a newer VS),
+      # so let CMake pick whichever Visual Studio is actually installed.
       - name: Configure
-        run: cmake -B build -G "Visual Studio 17 2022" -A x64
+        run: cmake -B build -A x64
+
+      - name: Show the generator CMake picked
+        run: |
+          Select-String -Path build\CMakeCache.txt -Pattern "^CMAKE_GENERATOR(_PLATFORM)?:"
+        shell: pwsh
 
       - name: Build
         run: cmake --build build --config Release --target AETHER_VST3 aether_dsp_test aether_license_test --parallel
@@ -46,7 +54,7 @@ jobs:
         run: .\build\aether_license_test_artefacts\Release\aether_license_test.exe
 
       - name: Package installer
-        run: powershell -ExecutionPolicy Bypass -File installer\build-installer.ps1 -BuildDir build -Generator "Visual Studio 17 2022"
+        run: powershell -ExecutionPolicy Bypass -File installer\build-installer.ps1 -BuildDir build
 
       - uses: actions/upload-artifact@v4
         with:
