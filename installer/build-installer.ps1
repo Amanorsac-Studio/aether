@@ -38,8 +38,35 @@ Copy-Item -LiteralPath $vst3 -Destination (Join-Path $stage 'VST3') -Recurse -Fo
 Copy-Item -LiteralPath (Join-Path $repoRoot 'README.md') -Destination $stage -Force
 
 if (Test-Path -LiteralPath $payload) { Remove-Item -LiteralPath $payload -Force }
-Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $payload -CompressionLevel Optimal
-Write-Host ("Payload: {0:N1} MB" -f ((Get-Item -LiteralPath $payload).Length / 1MB))
+
+# Packed by hand rather than with Compress-Archive: on Windows PowerShell 5.1 that
+# cmdlet writes entry names with backslashes, and a zip entry name is specified to
+# use '/'. The installer used to read those backslash directory entries as files and
+# fail with "Could not write: ...\AETHER.vst3\". Entry names here are always '/',
+# and directories are implied by their files, so no packer-specific quirks survive.
+Add-Type -AssemblyName System.IO.Compression -ErrorAction Stop
+Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction Stop
+$zip = [System.IO.Compression.ZipFile]::Open($payload, [System.IO.Compression.ZipArchiveMode]::Create)
+try {
+    $stageFull = [System.IO.Path]::GetFullPath($stage)
+    foreach ($file in Get-ChildItem -LiteralPath $stage -Recurse -File) {
+        $entry = $file.FullName.Substring($stageFull.Length).TrimStart('\','/').Replace('\','/')
+        [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+            $zip, $file.FullName, $entry, [System.IO.Compression.CompressionLevel]::Optimal)
+    }
+} finally { $zip.Dispose() }
+
+# Fail loudly here rather than shipping an installer whose payload is laid out wrong.
+$check = [System.IO.Compression.ZipFile]::OpenRead($payload)
+try {
+    $names = $check.Entries | ForEach-Object { $_.FullName }
+    $bad = $names | Where-Object { $_ -like '*\*' }
+    if ($bad) { throw "Payload entry names contain backslashes: $($bad -join ', ')" }
+    if (-not ($names | Where-Object { $_ -like 'VST3/AETHER.vst3/*' })) {
+        throw "Payload has no VST3/AETHER.vst3/ entries; the staged layout is wrong."
+    }
+    Write-Host ("Payload: {0:N1} MB, {1} entries" -f ((Get-Item -LiteralPath $payload).Length / 1MB), $names.Count)
+} finally { $check.Dispose() }
 
 # ---- 2. Build the installer ----------------------------------------------
 $installerBuild = Join-Path $buildRoot 'installer'
