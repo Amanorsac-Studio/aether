@@ -1,5 +1,5 @@
 <#
-    Packages a finished AETHER Release build into dist\AETHER_Setup_1.0.0.exe.
+    Packages a finished AETHER Release build into dist\AETHER-1.0.0-Windows.exe.
 
     Run this after building the Release VST3 target, or just run
     make_installer.bat in the project root, which does both.
@@ -23,7 +23,9 @@ $buildRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $BuildDir))
 $artefacts = Join-Path $buildRoot "AETHER_artefacts\$Configuration"
 $vst3      = Join-Path $artefacts 'VST3\AETHER.vst3'
 $distRoot  = Join-Path $repoRoot 'dist'
-$name      = "AETHER_Setup_${version}.exe"
+# Packaging Standard P28: <Product>-<version>-Windows.exe, product name as the studio
+# writes it with spaces removed. The store looks the file up by name, so this must not drift.
+$name      = "AETHER-${version}-Windows.exe"
 $target    = Join-Path $distRoot $name
 
 if (-not (Test-Path -LiteralPath $vst3)) { throw "VST3 bundle not found: $vst3`nBuild the Release configuration first." }
