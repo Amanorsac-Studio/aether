@@ -63,7 +63,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $exe  = (Get-ChildItem dist\AETHER_Setup_*.exe | Select-Object -First 1).FullName
+          $exe  = (Get-ChildItem dist\AETHER-*-Windows.exe | Select-Object -First 1).FullName
           $vst3 = Join-Path $env:RUNNER_TEMP 'smoke-vst3'
           $supp = Join-Path $env:RUNNER_TEMP 'smoke-support'
 
@@ -90,8 +90,8 @@ jobs:
         with:
           name: AETHER-windows
           path: |
-            dist/AETHER_Setup_*.exe
-            dist/AETHER_Setup_*.exe.sha256
+            dist/AETHER-*-Windows.exe
+            dist/AETHER-*-Windows.exe.sha256
           if-no-files-found: error
 
   macos:
@@ -145,14 +145,49 @@ jobs:
         run: bash tools/sign_macos.sh build/AETHER_artefacts/Release
 
       # Fails the job rather than quietly uploading nothing, as the analog bundle does.
+      # Unconditional: every macOS build produces the installer. This used to live inside
+      # tools/sign_macos.sh behind both HAVE_SIGNING and an optional INSTALLER_IDENTITY,
+      # so no run ever produced one and the artefact was a pair of bare bundles.
+      # Packaging Standard P1 (one file per platform) and P28 (the exact filename).
+      - name: Build the macOS installer
+        env:
+          INSTALLER_IDENTITY: ${{ secrets.MACOS_INSTALLER_IDENTITY }}
+        run: bash installer/macos/build_pkg.sh build/AETHER_artefacts/Release 1.0.0
+
+      - name: Notarise and staple the installer
+        if: env.HAVE_SIGNING == 'true'
+        env:
+          APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+          TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          PKG=dist/AETHER-1.0.0-macOS.pkg
+          # notarytool --wait exits 0 even when Apple answers "Invalid", so read the status.
+          RESULT=$(xcrun notarytool submit "$PKG" --apple-id "$APPLE_ID" \
+                     --password "$APPLE_PASSWORD" --team-id "$TEAM_ID" \
+                     --wait --timeout 30m --output-format json)
+          STATUS=$(printf '%s' "$RESULT" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("status",""))')
+          if [ "$STATUS" != "Accepted" ]; then
+            ID=$(printf '%s' "$RESULT" | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
+            xcrun notarytool log "$ID" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$TEAM_ID"
+            exit 1
+          fi
+          xcrun stapler staple "$PKG"
+          xcrun stapler validate "$PKG"
+          spctl --assess -vv --type install "$PKG"
+
+      # Fail rather than upload an installer-less build.
+      - name: Check the installer exists
+        run: test -f dist/AETHER-1.0.0-macOS.pkg
+
       - uses: actions/upload-artifact@v4
         with:
           name: AETHER-macos
           path: |
+            dist/AETHER-1.0.0-macOS.pkg
             build/AETHER_artefacts/Release/VST3/AETHER.vst3
             build/AETHER_artefacts/Release/AU/AETHER.component
-            dist/AETHER-macOS-*.zip
-            dist/AETHER-macOS.pkg
           if-no-files-found: error
 
       # A tagged release that came out unsigned would fail Gatekeeper on every
