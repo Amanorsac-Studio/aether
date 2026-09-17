@@ -56,6 +56,36 @@ jobs:
       - name: Package installer
         run: powershell -ExecutionPolicy Bypass -File installer\build-installer.ps1 -BuildDir build
 
+      # Actually install and uninstall the thing on a real Windows runner. The payload
+      # layout bug that broke the first real install could not be reproduced under
+      # Wine, so "it links" and "it packages" are not enough evidence that it works.
+      - name: Smoke-test install and uninstall
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe  = (Get-ChildItem dist\AETHER_Setup_*.exe | Select-Object -First 1).FullName
+          $vst3 = Join-Path $env:RUNNER_TEMP 'smoke-vst3'
+          $supp = Join-Path $env:RUNNER_TEMP 'smoke-support'
+
+          # A WIN32-subsystem exe returns immediately from the shell, so wait explicitly.
+          $p = Start-Process -FilePath $exe -ArgumentList '/S', "/VST3=$vst3", "/D=$supp" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Installer exited $($p.ExitCode)" }
+
+          $binary = Join-Path $vst3 'AETHER.vst3\Contents\x86_64-win\AETHER.vst3'
+          if (-not (Test-Path -LiteralPath $binary)) {
+              Write-Host "--- what landed in $vst3 ---"
+              if (Test-Path $vst3) { Get-ChildItem -Recurse -Force $vst3 | Select-Object -ExpandProperty FullName }
+              throw "Install produced no plugin at $binary"
+          }
+          Write-Host ("Installed: {0:N1} MB" -f ((Get-Item -LiteralPath $binary).Length / 1MB))
+
+          $uninst = Join-Path $supp 'Uninstall AETHER.exe'
+          if (-not (Test-Path -LiteralPath $uninst)) { throw "No uninstaller at $uninst" }
+          $u = Start-Process -FilePath $uninst -ArgumentList '/S' -Wait -PassThru
+          if ($u.ExitCode -ne 0) { throw "Uninstaller exited $($u.ExitCode)" }
+          if (Test-Path -LiteralPath (Join-Path $vst3 'AETHER.vst3')) { throw 'Uninstall left the plugin behind' }
+          Write-Host 'Uninstall OK'
+
       - uses: actions/upload-artifact@v4
         with:
           name: AETHER-windows
