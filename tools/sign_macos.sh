@@ -11,7 +11,8 @@
 #   APPLE_ID            Apple ID for notarisation                  [required]
 #   APPLE_PASSWORD      app-specific password                      [required]
 #   TEAM_ID             10-character team id                       [required]
-#   INSTALLER_IDENTITY  Developer ID Installer: ... (TEAMID)       [optional, builds a .pkg]
+#
+# The .pkg is built separately by installer/macos/build_pkg.sh.
 
 set -euo pipefail
 
@@ -66,25 +67,6 @@ rm -f "$ZIP"
 rm -rf "$STAGE"
 echo "Stapled bundles: $ZIP"
 
-# Optional installer package, so customers get the same one-double-click experience
-# as on Windows. Needs a Developer ID Installer certificate.
-if [ -n "${INSTALLER_IDENTITY:-}" ]; then
-    PKGROOT="$(mktemp -d)"
-    mkdir -p "$PKGROOT/Library/Audio/Plug-Ins/VST3" "$PKGROOT/Library/Audio/Plug-Ins/Components"
-    [ -d "$VST3" ] && cp -R "$VST3" "$PKGROOT/Library/Audio/Plug-Ins/VST3/"
-    [ -d "$AU" ]   && cp -R "$AU"   "$PKGROOT/Library/Audio/Plug-Ins/Components/"
-
-    COMPONENT="$(mktemp -d)/AETHER-component.pkg"
-    pkgbuild --root "$PKGROOT" --identifier studio.amanorsac.aether \
-             --version "$VERSION" --install-location / "$COMPONENT"
-
-    PKG="$DIST/AETHER-macOS.pkg"
-    productbuild --package "$COMPONENT" --sign "$INSTALLER_IDENTITY" --timestamp "$PKG"
-
-    xcrun notarytool submit "$PKG" \
-        --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$TEAM_ID" \
-        --wait --timeout 30m
-    xcrun stapler staple "$PKG"
-    rm -rf "$PKGROOT"
-    echo "Installer: $PKG"
-fi
+# The .pkg is NOT built here. Packaging belongs to installer/macos/build_pkg.sh, which
+# runs on every build whether or not signing secrets exist; burying it behind this script's
+# INSTALLER_IDENTITY check is why no run ever produced a macOS installer.
