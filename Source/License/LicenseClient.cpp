@@ -309,7 +309,12 @@ void LicenseClient::activateAsync (const String& licenseKeyRaw, std::function<vo
         return;
     }
 
-    const auto licenseKey = licenseKeyRaw.trim().toUpperCase();
+    // Send the key exactly as the customer typed it, whitespace trimmed and nothing else.
+    // Standard section 4.1 gives no normalisation rule, so upper-casing it was mine to invent:
+    // a key containing any lower-case character was being sent as a different string than the
+    // one issued, the server answered 404 no_such_license, and the app told the customer their
+    // key was not recognised. The proof check below stays case-insensitive.
+    const auto licenseKey = licenseKeyRaw.trim();
 
     Thread::launch ([this, licenseKey, onFinished]
     {
