@@ -135,13 +135,29 @@ static bool extractPayload (const std::wstring& vst3Root, const std::wstring& in
 
         std::wstring name = widen (st.m_filename);
         for (auto& c : name) if (c == L'/') c = L'\\';
+        if (name.empty()) continue;
+
+        // A directory entry is one whose name ends in a separator. miniz only tests for
+        // a trailing '/', but Windows PowerShell's Compress-Archive writes entry names
+        // with backslashes, so its directory entries slip through that test, get treated
+        // as files, and CreateFileW then fails on a path ending in '\' - which is exactly
+        // how "Could not write: ...\AETHER.vst3\" happens. Decide it ourselves, after
+        // normalising, so the installer does not care which tool packed the payload.
+        const bool isDir = name.back() == L'\\' || mz_zip_reader_is_file_a_directory (&zip, i);
+        while (! name.empty() && name.back() == L'\\') name.pop_back();
+        if (name.empty()) continue;
+
+        // Refuse anything trying to climb out of the destination (zip slip).
+        if (name.find (L"..\\") != std::wstring::npos || name == L".."
+            || name.find (L':') != std::wstring::npos)
+            { ok = false; err = L"The installer payload contains an unsafe path:\n" + name; break; }
 
         // Route by the archive's top-level folder.
         std::wstring dest;
         if (name.rfind (L"VST3\\", 0) == 0) dest = join (vst3Root, name.substr (5));
         else                                dest = join (installRoot, name);
 
-        if (mz_zip_reader_is_file_a_directory (&zip, i)) { makeDirs (dest); continue; }
+        if (isDir) { makeDirs (dest); continue; }
 
         const size_t slash = dest.find_last_of (L'\\');
         if (slash != std::wstring::npos) makeDirs (dest.substr (0, slash));
